@@ -42,10 +42,10 @@ public abstract class BaseEntityService {
 	@Autowired
 	ProjectService projectService;
 
-	protected BaseLock getLock(CheckEntityEnum entity, String name, Long projectId) {
+	protected BaseLock getLock(CheckEntityEnum entity, String name, Long domainId) {
 
 		return LockFactory.getLock(
-				entity.getSource().toUpperCase() + Consts.AT_SYMBOL + name + Consts.AT_SYMBOL + projectId, 5,
+				entity.getSource().toUpperCase() + Consts.AT_SYMBOL + name + Consts.AT_SYMBOL + domainId, 5,
 				LockType.REDIS);
 	}
 
@@ -89,14 +89,34 @@ public abstract class BaseEntityService {
 		case DASHBOARD:
 			permission = projectPermission.getVizPermission();
 			break;
+		case VIEW:
+			permission = projectPermission.getViewPermission();
+			break;
+		case WIDGET:
+			permission = projectPermission.getWidgetPermission();
+			break;
 		default:
 			break;
 		}
 
 		return permission;
 	}
+	
+	protected void checkDeletePermission(CheckEntityEnum entity, Long projectId, User user)
+			throws UnAuthorizedExecption {
 
-	protected boolean checkWritePermission(CheckEntityEnum entity, Long projectId, User user, String operation)
+		ProjectPermission projectPermission = getProjectPermission(projectId, user);
+
+		if (projectPermission == null) {
+			alertUnAuthorized(entity, user, "delete");
+		}
+
+		if (getEntityPermission(entity, projectPermission) < UserPermissionEnum.DELETE.getPermission()) {
+			alertUnAuthorized(entity, user, "delete");
+		}
+	}
+
+	protected void checkWritePermission(CheckEntityEnum entity, Long projectId, User user, String operation)
 			throws UnAuthorizedExecption {
 
 		ProjectPermission projectPermission = getProjectPermission(projectId, user);
@@ -108,10 +128,22 @@ public abstract class BaseEntityService {
 		if (getEntityPermission(entity, projectPermission) < UserPermissionEnum.WRITE.getPermission()) {
 			alertUnAuthorized(entity, user, operation);
 		}
-
-		return true;
 	}
+	
+	protected void checkSharePermission(CheckEntityEnum entity, Long projectId, User user)
+			throws UnAuthorizedExecption {
 
+		ProjectPermission projectPermission = getProjectPermission(projectId, user);
+
+		if (projectPermission == null) {
+			alertUnAuthorized(entity, user, "share");
+		}
+
+		if (!projectPermission.getSharePermission()) {
+			alertUnAuthorized(entity, user, "share");
+		}
+	}
+	
 	protected boolean checkReadPermission(CheckEntityEnum entity, Long projectId, User user) {
 
 		ProjectPermission projectPermission = getProjectPermission(projectId, user);

@@ -19,6 +19,7 @@
 
 package edp.core.utils;
 
+import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.util.StringUtils;
 import edp.core.common.jdbc.JdbcDataSource;
 import edp.core.consts.Consts;
@@ -35,6 +36,7 @@ import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.expression.Alias;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Table;
+import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.*;
 import org.joda.time.DateTime;
 import org.slf4j.Logger;
@@ -123,7 +125,8 @@ public class SqlUtils {
 		sql = filterAnnotate(sql);
 		checkSensitiveSql(sql);
 		if (isQueryLogEnable) {
-			sqlLogger.info("{}", sql);
+			String md5 = MD5Util.getMD5(sql, true, 16);
+			sqlLogger.info("{} execute for sql:{}", md5, formatSql(sql));
 		}
 		try {
 			jdbcTemplate().execute(sql);
@@ -155,10 +158,6 @@ public class SqlUtils {
     public List<Map<String, Object>> query4List(String sql, int limit) throws Exception {
         sql = filterAnnotate(sql);
         checkSensitiveSql(sql);
-        String md5 = MD5Util.getMD5(sql, true, 16);
-        if (isQueryLogEnable) {
-            sqlLogger.info("{}  >> \n{}", md5, sql);
-        }
         JdbcTemplate jdbcTemplate = jdbcTemplate();
         jdbcTemplate.setMaxRows(limit > resultLimit ? resultLimit : limit);
 
@@ -167,7 +166,8 @@ public class SqlUtils {
         List<Map<String, Object>> list = jdbcTemplate.queryForList(sql);
 
         if (isQueryLogEnable) {
-            sqlLogger.info("{} query for >> {} ms", md5, System.currentTimeMillis() - before);
+        	 String md5 = MD5Util.getMD5(sql, true, 16);
+            sqlLogger.info("{} query for({} ms) sql:{}", md5, System.currentTimeMillis() - before, formatSql(sql));
         }
 
         return list;
@@ -179,8 +179,6 @@ public class SqlUtils {
         sql = filterAnnotate(sql);
         checkSensitiveSql(sql);
 
-        String md5 = MD5Util.getMD5(sql + pageNo + pageSize + limit, true, 16);
-
         long before = System.currentTimeMillis();
 
         JdbcTemplate jdbcTemplate = jdbcTemplate();
@@ -190,10 +188,6 @@ public class SqlUtils {
 
             if (limit > 0) {
                 resultLimit = limit > resultLimit ? resultLimit : limit;
-            }
-            
-            if (isQueryLogEnable) {
-                sqlLogger.info("{}  >> \n{}", md5, sql);
             }
             
             jdbcTemplate.setMaxRows(resultLimit);
@@ -224,22 +218,16 @@ public class SqlUtils {
 
             if (this.dataTypeEnum == MYSQL) {
                 sql = sql + " LIMIT " + startRow + ", " + pageSize;
-                md5 = MD5Util.getMD5(sql, true, 16);
-                if (isQueryLogEnable) {
-                    sqlLogger.info("{}  >> \n{}", md5, sql);
-                }
                 getResultForPaginate(sql, paginateWithQueryColumns, jdbcTemplate, excludeColumns, -1);
             } else {
-                if (isQueryLogEnable) {
-                    sqlLogger.info("{}  >> \n{}", md5, sql);
-                }
                 jdbcTemplate.setMaxRows(maxRows);
                 getResultForPaginate(sql, paginateWithQueryColumns, jdbcTemplate, excludeColumns, startRow);
             }
         }
 
         if (isQueryLogEnable) {
-            sqlLogger.info("{} query for >> {} ms", md5, System.currentTimeMillis() - before);
+        	String md5 = MD5Util.getMD5(sql + pageNo + pageSize + limit, true, 16);
+        	sqlLogger.info("{} query for({} ms) sql:{}", md5, System.currentTimeMillis() - before, formatSql(sql));
         }
 
         return paginateWithQueryColumns;
@@ -311,7 +299,7 @@ public class SqlUtils {
             plainSelect.setOrderByElements(null);
             countSql = String.format(QUERY_COUNT_SQL, select.toString());
         } catch (JSQLParserException e) {
-        	log.error(e.getMessage(), e);
+        	log.debug(e.getMessage(), e);
         }
         return SqlParseUtils.rebuildSqlWithFragment(countSql);
     }
@@ -319,7 +307,8 @@ public class SqlUtils {
 	public static Set<String> getQueryFromsAndJoins(String sql) {
 		Set<String> columnPrefixs = new HashSet<>();
 		try {
-			Select select = (Select) CCJSqlParserUtil.parse(sql);
+			Statement parse = CCJSqlParserUtil.parse(sql);
+			Select select = (Select) parse;
 			SelectBody selectBody = select.getSelectBody();
 			if (selectBody instanceof PlainSelect) {
 				PlainSelect plainSelect = (PlainSelect) selectBody;
@@ -341,7 +330,7 @@ public class SqlUtils {
 				columnPrefixExtractor(columnPrefixs, plainSelect);
 			}
 		} catch (JSQLParserException e) {
-			log.error(e.getMessage(), e);
+			log.debug(e.getMessage(), e);
 		}
 		return columnPrefixs;
 	}
@@ -1035,6 +1024,10 @@ public class SqlUtils {
             return null;
         }
         return this.jdbcSourceInfo.getJdbcUrl();
+    }
+    
+    public static String formatSql(String sql) {
+    	return SQLUtils.formatMySql(sql);
     }
 }
 
